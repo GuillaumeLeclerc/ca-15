@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_map>
+#include <set>
 
 #include "GlobalClock.h"
 #include "TSTMLock.h"
@@ -21,6 +22,8 @@ class TSTMMemory {
 		GlobalClock& clock;
 		std::unordered_map<volatile word*, object> writeLog;
 		std::unordered_map<volatile word*, object> readLog;
+		std::set<word*> allocated;
+		std::set<word*> freed;
 		size_t begin;
 		size_t end;
 
@@ -35,4 +38,6 @@ class TSTMMemory {
 		void write(volatile word* addr, word value);
 		void save();
 		void rollback();
+		word* alloc(size_t t);
+		void free(word*);
 };

@@ -55,6 +55,7 @@ void TSTMMemory::write(volatile word* addr, word value) {
 
 void TSTMMemory::extendValidity(word now) {
 	return;
+	// TODO implement correctly to make it faster !!
 	this->end = now;
 
 	for (auto& it: this->writeLog) {
@@ -159,10 +160,15 @@ err:
 		for(auto& addr : acquiredLocks) {
 			PRINT("Unlocking");
 			this->locks[addr].unlock(this->id);
-		}
-
+		} 
 		if (error) {
 			TX_ABORT(4);
+		}
+		// allocation were usefull
+		this->allocated.clear();
+		//free only if the transaction commit
+		for(auto& it : this->freed) {
+			free(it);
 		}
 		PRINT("end TX");
 	}
@@ -172,6 +178,11 @@ err:
 }
 
 void TSTMMemory::rollback() {
+	//freeing useless memory
+	for (auto& it : this->allocated) {
+		free(it);
+	}
+	this->allocated.clear();
 	this->cleanLog();
 }
 
@@ -182,4 +193,16 @@ void TSTMMemory::relaseLocks() {
 void TSTMMemory::cleanLog() {
 	this->writeLog.clear();
 	this->readLog.clear();
+	this->freed.clear();
+	assert(this->allocated.size() == 0);
+}
+
+word* TSTMMemory::alloc(size_t v) {
+	word* ptr = (word*) malloc(v);
+	this->allocated.insert(ptr);
+	return ptr;
+}
+
+void TSTMMemory::free(word* ptr) {
+	this->freed.insert(ptr);
 }
