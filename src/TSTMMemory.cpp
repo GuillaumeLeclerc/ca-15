@@ -2,8 +2,9 @@
 #include "sstm.h"
 
 #include <iostream>
-
 #include <vector>
+#include <thread>
+#include <chrono>
 
 #define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
 
@@ -12,7 +13,9 @@ TSTMMemory::TSTMMemory(word id, TSTMLockArray& locks, GlobalClock& clock):
 	locks(locks),
 	id(id),
 	clock(clock)
-{}
+{
+	this->backoff = 0;
+}
 
 void TSTMMemory::start() {
 	this->begin = clock.getClock();
@@ -25,28 +28,38 @@ void TSTMMemory::write(volatile word* addr, word value) {
 	PRINT("Writing: " << value);
 	TSTMLock& lock = this->locks[addr];
 
-	word currentVersion = lock.getVersion();
-	PRINT("Current Version" << currentVersion);
 
-	if (lock.locked()) {
+
+	if (!lock.lock(this->id)) {
 		TX_ABORT(5);
 	}
+
+	PRINT("GETTING THE FUCKING LOCK");
+
+	word currentVersion = lock.getVersion();
 	word now = this->clock.getClock();
+
+	lock.unlock(this->id);
+
+	PRINT("Current Version" << currentVersion << "Now " << now);
+	PRINT(this->begin << " - "  << this->end);
 
 	if (currentVersion > this->end) {
 		this->extendValidity(now);
 	}
+	PRINT(this->begin << " - "  << this->end);
 
 	if (currentVersion <= this->end) {
 		this->begin = this->begin > currentVersion?this->begin:currentVersion;
 		this->end = this->end<now?this->end:now;
 		object o = {
 			currentVersion,
-			clock.getClock(),
+			now,
 			value
 		};
 		this->writeLog[addr] = o;
 		this->readLog.erase(addr);
+		PRINT(this->begin << " - "  << this->end);
 	} else {
 		TX_ABORT(2);
 	}
@@ -54,17 +67,33 @@ void TSTMMemory::write(volatile word* addr, word value) {
 }
 
 void TSTMMemory::extendValidity(word now) {
-	return;
-	// TODO implement correctly to make it faster !!
+
 	this->end = now;
 
 	for (auto& it: this->writeLog) {
 		TSTMLock& lock = this->locks[it.first];
-		word version = lock.getVersion();
-		if (version == it.second.from) {
-			it.second.to = now;
+		if (!lock.locked()) {
+			word version = lock.getVersion();
+			PRINT("CUrrent VVV " << version);
+			if (version == it.second.from) {
+				it.second.to = now;
+			}
 		}
 		this->end = this->end<it.second.to?this->end:it.second.to;
+		PRINT("Extending end to " << this->end);
+	}
+
+	for (auto& it: this->readLog) {
+		TSTMLock& lock = this->locks[it.first];
+		if (!lock.locked()) {
+			word version = lock.getVersion();
+			PRINT("CUrrent VVV " << version);
+			if (version == it.second.from) {
+				it.second.to = now;
+			}
+		}
+		this->end = this->end<it.second.to?this->end:it.second.to;
+		PRINT("Extending end to " << this->end);
 	}
 }
 
@@ -142,6 +171,7 @@ void TSTMMemory::save() {
 			funlockfile(stdout);
 			if (this->end < now - 1) {
 				this->extendValidity(now - 1);
+				//PRINT("me -> [" << this->begin << ", " << this->end << "]");
 				if (this->end < now - 1) {
 					error = true;
 					goto err;
@@ -151,6 +181,9 @@ void TSTMMemory::save() {
 				PRINT("WRITING ON MEMORY");
 				TSTMLock& lock = this->locks[(volatile word*)it.first];
 				lock.changeVersion(this->id, now);
+				assert(lock.getVersion() == now);
+				__sync_synchronize();
+				PRINT("WRITING ON MEMORY -- " << now);
 				*it.first = it.second.value;
 			}
 		}
@@ -159,7 +192,9 @@ err:
 
 		for(auto& addr : acquiredLocks) {
 			PRINT("Unlocking");
+			__sync_synchronize();
 			this->locks[addr].unlock(this->id);
+			PRINT("UNLOCKED " << this->locks[addr].getVersion());
 		} 
 		if (error) {
 			TX_ABORT(4);
@@ -170,11 +205,30 @@ err:
 		for(auto& it : this->freed) {
 			free(it);
 		}
+
+
+		PRINT("== Reset backoff");
+		this->backoff = 0;
 		PRINT("end TX");
 	}
 
 	this->relaseLocks();
 	this->cleanLog();
+}
+
+void TSTMMemory::increaseBackoff() {
+	PRINT("== Oold backoff" << this->backoff);
+	if (this->backoff == 0) {
+		this->backoff = 1;
+	} else {
+		this->backoff *= 2;
+	}
+	PRINT("==New Backoff " << this->backoff);
+}
+
+void TSTMMemory::wait() {
+	PRINT("==Sleeping " << this->backoff);
+	std::this_thread::sleep_for(std::chrono::microseconds(this->backoff));
 }
 
 void TSTMMemory::rollback() {
@@ -184,6 +238,8 @@ void TSTMMemory::rollback() {
 	}
 	this->allocated.clear();
 	this->cleanLog();
+	this->increaseBackoff();
+	this->wait();
 }
 
 

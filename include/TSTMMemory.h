@@ -26,10 +26,13 @@ class TSTMMemory {
 		std::set<word*> freed;
 		size_t begin;
 		size_t end;
+		size_t backoff;
 
 		void relaseLocks();
 		void cleanLog();
 		void extendValidity(word now);
+		void increaseBackoff();
+		void wait();
 	
 	public:
 		TSTMMemory(word id, TSTMLockArray& locks, GlobalClock& clock);
