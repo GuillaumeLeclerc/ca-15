@@ -13,10 +13,9 @@
 extern "C" {
 #endif
 
-#define DEBUG 0
+#define DEBUG 1
 
 #define TTAS
-#include "lock_if.h"
 
   /* **************************************************************************************************** */
   /* structures */
@@ -32,7 +31,6 @@ extern "C" {
 
   typedef struct sstm_metadata_global
   {
-    ptlock_t glock;
     size_t n_commits;
     size_t n_aborts;
   } sstm_metadata_global_t;
@@ -71,11 +69,10 @@ extern sstm_metadata_global_t sstm_meta_global;
     short int reason;					\
     if ((reason = sigsetjmp(sstm_meta.env, 0)) != 0)	\
       {							\
-	UNLOCK(&sstm_meta_global.glock);		\
 	sstm_tx_cleanup();				\
 	PRINTD("|| restarting due to %d\n", reason);	\
       }							\
-    LOCK(&sstm_meta_global.glock);			\
+	 sstm_tx_init();\
   }
 
 #define TX_COMMIT()				\
@@ -121,12 +118,16 @@ extern sstm_metadata_global_t sstm_meta_global;
      ****** DO NOT CHANGE THE EXISTING CODE*********   
      */
   extern void sstm_thread_stop();
+
+  extern void sstm_tx_init();
+
   /* transactionally reads the value of addr
    */
-  extern inline uintptr_t sstm_tx_load(volatile uintptr_t* addr);
+  extern uintptr_t sstm_tx_load(volatile uintptr_t* addr);
   /* transactionally writes val in addr
    */
-  extern inline void sstm_tx_store(volatile uintptr_t* addr, uintptr_t val);
+  extern void sstm_tx_store(volatile uintptr_t* addr, uintptr_t val);
+
   /* cleaning up in case of an abort 
      (e.g., flush the read or write logs)
   */

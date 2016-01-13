@@ -1,7 +1,17 @@
+#include "GlobalClock.h"
+#include "TSTMLock.h"
+#include "TSTMLockArray.h"
+#include "TSTMMemory.h"
 #include "sstm.h"
 
-LOCK_LOCAL_DATA;
+#include <iostream>
+
 __thread sstm_metadata_t sstm_meta;	 /* per-thread metadata */
+__thread TSTMMemory* memory;
+
+word tid = 1;
+TSTMLockArray* locks;
+GlobalClock gClock;
 sstm_metadata_global_t sstm_meta_global; /* global metadata */
 
 /* initializes the TM runtime 
@@ -10,7 +20,7 @@ sstm_metadata_global_t sstm_meta_global; /* global metadata */
 void
 sstm_start()
 {
-  INIT_LOCK(&sstm_meta_global.glock);
+	locks = new TSTMLockArray(11, 2);
 }
 
 /* terminates the TM runtime
@@ -19,6 +29,7 @@ sstm_start()
 void
 sstm_stop()
 {
+	delete locks;
 }
 
 
@@ -28,6 +39,10 @@ sstm_stop()
 void
 sstm_thread_start()
 {
+	sstm_meta.id = __sync_fetch_and_add(&tid, 1);
+	std::cout << sstm_meta.id <<std::endl;
+
+	memory = new TSTMMemory(sstm_meta.id, *locks, gClock);
 }
 
 /* terminates thread local data
@@ -38,29 +53,31 @@ sstm_thread_start()
 void
 sstm_thread_stop()
 {
+	delete memory;
   __sync_fetch_and_add(&sstm_meta_global.n_commits, sstm_meta.n_commits);
   __sync_fetch_and_add(&sstm_meta_global.n_aborts, sstm_meta.n_aborts);
 }
 
+extern void sstm_tx_init() {
+	memory->start();
+}
 
 /* transactionally reads the value of addr
  * On a more complex than GL-STM algorithm,
  * you need to do more work than simply reading the value.
 */
-inline uintptr_t
-sstm_tx_load(volatile uintptr_t* addr)
+uintptr_t sstm_tx_load(volatile uintptr_t* addr)
 {
-  return *addr;
+	return memory->read(addr);
 }
 
 /* transactionally writes val in addr
  * On a more complex than GL-STM algorithm,
  * you need to do more work than simply reading the value.
 */
-inline void
-sstm_tx_store(volatile uintptr_t* addr, uintptr_t val)
+void sstm_tx_store(volatile uintptr_t* addr, uintptr_t val)
 {
-  *addr = val;
+	return memory->write(addr, val);
 }
 
 /* cleaning up in case of an abort 
@@ -69,8 +86,9 @@ sstm_tx_store(volatile uintptr_t* addr, uintptr_t val)
 void
 sstm_tx_cleanup()
 {
-  sstm_alloc_on_abort();
-  sstm_meta.n_aborts++;
+	memory->rollback();
+	sstm_alloc_on_abort();
+	sstm_meta.n_aborts++;
 }
 
 /* tries to commit a transaction
@@ -80,9 +98,9 @@ sstm_tx_cleanup()
 void
 sstm_tx_commit()
 {
-  UNLOCK(&sstm_meta_global.glock);	       
-  sstm_alloc_on_commit();
-  sstm_meta.n_commits++;		
+	memory->save();
+	sstm_alloc_on_commit();
+	sstm_meta.n_commits++;		
 }
 
 

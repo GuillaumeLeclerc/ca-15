@@ -1,14 +1,10 @@
 #include "sstm_alloc.h"
 
-__thread sstm_alloc_t sstm_allocator = { .n_allocs = 0 };
-__thread sstm_alloc_t sstm_freeing = { .n_allocs = 0 };
-
 /* allocate some memory within a transaction
 */
 void*
 sstm_tx_alloc(size_t size)
 {
-  assert(sstm_allocator.n_allocs < SSTM_ALLOC_MAX_ALLOCS);
   void* m = malloc(size);
 
   /* 
@@ -24,8 +20,6 @@ sstm_tx_alloc(size_t size)
 void
 sstm_tx_free(void* mem)
 {
-  assert(sstm_freeing.n_allocs < SSTM_ALLOC_MAX_ALLOCS);
-
   /* 
      in a more complex STM systems,
      you cannot immediately free(mem) as below because you might 
