@@ -24,16 +24,6 @@ TSTMLockArray::~TSTMLockArray() {
 	delete this->locks;
 }
 
-TSTMLock& TSTMLockArray::getLockForAddress(volatile word* ptr) {
-	uintptr_t addr = (uintptr_t)ptr;
-	addr >>= this->log2StripSize;
-	size_t index = addr % this->size;
-	return this->locks[index];
-}
-
-TSTMLock& TSTMLockArray::operator[](volatile word*  index) {
-	return this->getLockForAddress(index);
-}
 
 /**
 GlobalClock versioning;

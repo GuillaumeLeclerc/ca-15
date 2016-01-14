@@ -33,11 +33,20 @@ class TSTMMemory {
 		std::unordered_map<volatile word*, object> readLog;
 		std::set<word*> allocated;
 		std::set<word*> freed;
+		std::vector<word*> acquiredLocks;
 		size_t begin;
 		size_t end;
 		size_t backoff;
 
-		inline void relaseLocks() { }
+		inline void relaseLocks() { 
+				for(auto& addr : acquiredLocks) {
+					PRINT("Unlocking");
+					__sync_synchronize();
+					this->locks[addr].unlock(this->id);
+					PRINT("UNLOCKED " << this->locks[addr].getVersion());
+				} 
+				acquiredLocks.clear();
+		}
 		inline void cleanLog() {
 			this->writeLog.clear();
 			this->readLog.clear();
@@ -144,12 +153,12 @@ class TSTMMemory {
 				TX_ABORT(5);
 			}
 
+			this->acquiredLocks.push_back((word* )addr);
+
 			PRINT("GETTING THE FUCKING LOCK");
 
 			word currentVersion = lock.getVersion();
 			word now = this->clock.getClock();
-
-			lock.unlock(this->id);
 
 			PRINT("Current Version" << currentVersion << "Now " << now);
 			PRINT(this->begin << " - "  << this->end);
@@ -176,21 +185,6 @@ class TSTMMemory {
 		}
 		inline void save() {
 			if (this->writeLog.size() > 0) {
-				std::vector<word*> acquiredLocks(0);
-				bool error = false;
-
-				for (auto& it: this->writeLog) {
-					if (this->locks[it.first].lock(this->id)) {
-						PRINT("able to lock");
-						acquiredLocks.push_back((word *)it.first);
-					} else {
-						PRINT("Unable to lock");
-						error = true;
-						goto err;
-					}
-				}
-
-				if (!error) {
 					word now = this->clock.increase(1);
 					/*flockfile(stdout);
 					  std::cout << "COMMIT STATUS at " << now << std::endl;
@@ -209,8 +203,7 @@ class TSTMMemory {
 						this->extendValidity(now - 1);
 						//PRINT("me -> [" << this->begin << ", " << this->end << "]");
 						if (this->end < now - 1) {
-							error = true;
-							goto err;
+							TX_ABORT(4);
 						}
 					}
 					for (auto& it: this->writeLog) {
@@ -224,17 +217,6 @@ class TSTMMemory {
 					}
 				}
 
-err:
-
-				for(auto& addr : acquiredLocks) {
-					PRINT("Unlocking");
-					__sync_synchronize();
-					this->locks[addr].unlock(this->id);
-					PRINT("UNLOCKED " << this->locks[addr].getVersion());
-				} 
-				if (error) {
-					TX_ABORT(4);
-				}
 				// allocation were usefull
 				this->allocated.clear();
 				//free only if the transaction commit
@@ -246,8 +228,6 @@ err:
 				PRINT("== Reset backoff");
 				this->backoff = 0;
 				PRINT("end TX");
-			}
-
 			this->relaseLocks();
 			this->cleanLog();
 		}
@@ -258,8 +238,9 @@ err:
 			}
 			this->allocated.clear();
 			this->cleanLog();
-			//this->increaseBackoff();
-			//this->wait();
+			this->relaseLocks();
+			this->increaseBackoff();
+			this->wait();
 		}
 		inline word* alloc(size_t t) {
 			word* ptr = (word*) malloc(t);

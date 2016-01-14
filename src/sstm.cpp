@@ -21,7 +21,7 @@ sstm_metadata_global_t sstm_meta_global; /* global metadata */
 void
 sstm_start()
 {
-	locks = new TSTMLockArray(10, 0);
+	locks = new TSTMLockArray(25, 2);
 }
 
 /* terminates the TM runtime

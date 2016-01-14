@@ -430,7 +430,7 @@ main(int argc, char **argv)
   pthread_attr_destroy(&attr);
 
   printf(" ZZZzzz %d seconds\n", duration);
-  std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+  std::this_thread::sleep_for(std::chrono::seconds(duration));
   printf(" Woken up\n");
   asm volatile ("mfence");
   work = 0;
