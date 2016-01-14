@@ -21,7 +21,7 @@ sstm_metadata_global_t sstm_meta_global; /* global metadata */
 void
 sstm_start()
 {
-	locks = new TSTMLockArray(11, 2);
+	locks = new TSTMLockArray(10, 0);
 }
 
 /* terminates the TM runtime
@@ -54,7 +54,6 @@ void
 sstm_thread_stop()
 {
 	delete memory;
-	std::cout << "öLKJöLKJ --- " << sstm_meta.n_commits << std::endl;
   __sync_fetch_and_add(&sstm_meta_global.n_commits, sstm_meta.n_commits);
   __sync_fetch_and_add(&sstm_meta_global.n_aborts, sstm_meta.n_aborts);
 }

@@ -25,6 +25,6 @@ $(SRCPATH)/%.o:: $(SRCPATH)/%.cpp include/sstm.h include/sstm_alloc.h
 test: libsstm.a
 	g++ ${CFLAGS} -I${INCL} src/test.cpp -o test ${LDFLAGS} -pthread
 
-libsstm.a:	src/sstm.o src/sstm_alloc.o src/GlobalClock.o src/TSTMLock.o src/TSTMLockArray.o src/TSTMMemory.o
-	ar cr libsstm.a src/sstm.o src/sstm_alloc.o src/GlobalClock.o src/TSTMLock.o src/TSTMLockArray.o src/TSTMMemory.o
+libsstm.a:	src/sstm.o src/sstm_alloc.o src/TSTMLock.o src/TSTMLockArray.o src/TSTMMemory.o
+	ar cr libsstm.a src/sstm.o src/sstm_alloc.o src/TSTMLock.o src/TSTMLockArray.o src/TSTMMemory.o
 
