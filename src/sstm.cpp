@@ -41,7 +41,6 @@ void
 sstm_thread_start()
 {
 	sstm_meta.id = __sync_fetch_and_add(&tid, 1);
-	std::cout << sstm_meta.id <<std::endl;
 
 	memory = new TSTMMemory(sstm_meta.id, *locks, gClock);
 }
@@ -55,6 +54,7 @@ void
 sstm_thread_stop()
 {
 	delete memory;
+	std::cout << "öLKJöLKJ --- " << sstm_meta.n_commits << std::endl;
   __sync_fetch_and_add(&sstm_meta_global.n_commits, sstm_meta.n_commits);
   __sync_fetch_and_add(&sstm_meta_global.n_aborts, sstm_meta.n_aborts);
 }

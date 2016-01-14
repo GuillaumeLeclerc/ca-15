@@ -5,6 +5,9 @@
 #include <malloc.h>
 #include <stdlib.h>
 
+#include <thread>
+#include <chrono>
+
 #include "sstm.h"
 #include "random.h"
 __thread unsigned long* seeds; 
@@ -427,7 +430,7 @@ main(int argc, char **argv)
   pthread_attr_destroy(&attr);
 
   printf(" ZZZzzz %d seconds\n", duration);
-  sleep(duration);
+  std::this_thread::sleep_for(std::chrono::milliseconds(duration));
   printf(" Woken up\n");
   asm volatile ("mfence");
   work = 0;

@@ -49,13 +49,11 @@ void TSTMLock::changeVersion(word const ownerId, word const newVersion) {
 	__sync_synchronize();
 	word gotVersion = __sync_val_compare_and_swap(&this->version, currentVersion, newVersion);
 	assert(currentVersion == gotVersion);
-	__sync_synchronize();
 	assert(this->version == newVersion);
 }
 
 bool TSTMLock::locked() const {
 	__sync_synchronize();
-	std::cout << this->owner << std::endl;
 	return this->owner != 0;
 }
 

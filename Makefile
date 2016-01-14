@@ -9,8 +9,8 @@ LDFLAGS = -lpthread -L. -lsstm
 SRCPATH = ./src
 
 default: libsstm.a
-	cc ${CFLAGS} -I${INCL} src/bank.c -o bank ${LDFLAGS}
-	cc ${CFLAGS} -I${INCL} src/ll.c -o ll ${LDFLAGS}
+	g++ ${CFLAGS} -I${INCL} src/bank.cpp -o bank ${LDFLAGS}
+	g++ ${CFLAGS} -I${INCL} src/ll.cpp -o ll ${LDFLAGS}
 
 clean:
 	rm ./libsstm.a

@@ -7,7 +7,6 @@ GlobalClock::GlobalClock() {
 }
 
 size_t GlobalClock::increase(size_t inc) {
-	std::cout << value << " - " << inc << std::endl;
  	return __sync_fetch_and_add(&value, inc) + inc;
 }
 

@@ -6,7 +6,8 @@
 #include <thread>
 #include <chrono>
 
-#define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
+//#define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
+#define PRINT(x) ;
 
 
 TSTMMemory::TSTMMemory(word id, TSTMLockArray& locks, GlobalClock& clock):
@@ -157,7 +158,7 @@ void TSTMMemory::save() {
 
 		if (!error) {
 			word now = this->clock.increase(1);
-			flockfile(stdout);
+			/*flockfile(stdout);
 			std::cout << "COMMIT STATUS at " << now << std::endl;
 			std::cout << "me -> [" << this->begin << ", " << this->end << "]" << std::endl;
 			for (auto& it : this->writeLog) {
@@ -169,6 +170,7 @@ void TSTMMemory::save() {
 			}
 			std::cout << "------" << std::endl;
 			funlockfile(stdout);
+			*/
 			if (this->end < now - 1) {
 				this->extendValidity(now - 1);
 				//PRINT("me -> [" << this->begin << ", " << this->end << "]");

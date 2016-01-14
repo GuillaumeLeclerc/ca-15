@@ -5,6 +5,9 @@
 #include <malloc.h>
 #include <stdlib.h>
 
+#include <thread>
+#include <chrono>
+
 #include "sstm.h"
 #include "random.h"
 __thread unsigned long* seeds; 
@@ -64,17 +67,17 @@ ll_insert(ll_t* list, size_t key)
 
   if (cur == NULL || cur->key != key)
     {
-      node_t* new = TX_MALLOC(sizeof(node_t));
-      assert(new != NULL);
-      new->key = key;
-      new->next = cur;
+      node_t* nn = (node_t*) TX_MALLOC(sizeof(node_t));
+      assert(nn != NULL);
+      nn->key = key;
+      nn->next = cur;
       if (pred == NULL)
 	{
-	  TX_STORE(&list->head, new);
+	  TX_STORE(&list->head, nn);
 	}
       else
 	{
-	  TX_STORE(&pred->next, new);
+	  TX_STORE(&pred->next, nn);
 	}
       ret = 1;
     }
@@ -151,8 +154,7 @@ ll_search(ll_t* list, size_t key)
   return ret;
 }
 
-size_t 
-ll_size() 
+size_t ll_size(ll_t *) 
 {
   size_t size = 0;
   TX_START();
@@ -395,7 +397,7 @@ main(int argc, char **argv)
   pthread_attr_destroy(&attr);
 
   printf(" ZZZzzz %d seconds\n", duration);
-  sleep(duration);
+  std::this_thread::sleep_for(std::chrono::seconds(duration));
   printf(" Woken up\n");
   asm volatile ("mfence");
   work = 0;
