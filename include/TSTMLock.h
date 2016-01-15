@@ -5,65 +5,87 @@
 #include <assert.h>
 #include <cstdint>
 
+#include <atomic>
+#include <iostream>
+
+#if DEBUG
+#define PRINT2(x) flockfile(stdout);std::cout << "[" << ownerId << "] " << x << std::endl;funlockfile(stdout)
+
+#else 
+#define PRINT2(x) ;
+#endif
 typedef uintptr_t word;
 
 
 class TSTMLock {
 	private:
-		volatile word owner __attribute__((aligned(32)));
-		volatile word version __attribute__ ((aligned(32)));
+		std::atomic_uint_least64_t owner;
+		std::atomic_uint_least64_t version;
+		std::atomic_uint_least64_t readCount;
 
 	public:
 
-		TSTMLock(word initialSequenceNumber = 0);
+		TSTMLock(word initialSequenceNumber = 1);
 		TSTMLock(const TSTMLock& that) = delete;
 		TSTMLock& operator=(const TSTMLock& that) = delete;
+
 		word getVersion() const {
-			__sync_synchronize();
-			word versionNumber = this->version;
-			return versionNumber;
+			return version.load();
 		}
 
 		bool own(word const ownerId) {
 			assert(ownerId != 0);
-			__sync_synchronize();
-			word currentOwner = this->owner;
-			return currentOwner == ownerId;
+			return ownerId == owner.load();
 		}
 
 		bool lock(size_t ownerId) {
 			assert(ownerId != 0);
-			word oldValue = __sync_val_compare_and_swap(&this->owner, 0, ownerId);
-			//TODO membar ? 
+			word expected = 0;
+			__sync_synchronize();
+			const bool success = owner.compare_exchange_strong(expected, ownerId);
+			__sync_synchronize();
 
-			const bool res = oldValue == 0 || oldValue == ownerId;
+			PRINT2("Succ Ack lock " << success);
+			PRINT2("Old value was" << expected);
+
+			const bool res = success || expected == ownerId;
 			if (res) {
-				assert(this->own(ownerId) == true);
+				//assert(this->own(ownerId) == true);
+			} else {
+				assert(expected != 0 && expected != ownerId);
 			}
 			return res;
 		}
 
 		void unlock(size_t const ownerId) {
 			assert(ownerId != 0);
-			word oldValue = __sync_val_compare_and_swap(&this->owner, ownerId, 0);
-			assert(oldValue == ownerId || oldValue == 0);
-			assert(this->own(ownerId) == false);
+			word expected = ownerId;
+			assert(ownerId == owner.load());
+			bool success = owner.compare_exchange_strong(expected, 0);
+			assert(success || expected == 0);
+			PRINT2("LOCK SUCC " << success << " " << this->owner.load());
 		}
 
 		void changeVersion(word const ownerId, word const newVersion) {
-			__sync_synchronize();
 			assert(ownerId != 0);
 			assert(ownerId == this->owner);
-			word currentVersion = this->version;
-			__sync_synchronize();
-			word gotVersion = __sync_val_compare_and_swap(&this->version, currentVersion, newVersion);
-			assert(currentVersion == gotVersion);
+			version.store(newVersion);
 			assert(this->version == newVersion);
 		}
 
 		bool locked() const {
-			__sync_synchronize();
 			return this->owner != 0;
 		}
 
+		void addReader() {
+			this->readCount.fetch_add(1);
+		}
+
+		void decReader() {
+			this->readCount.fetch_sub(1);
+		}
+
+		word getReaderCount() {
+			return this->readCount.load();
+		}
 };

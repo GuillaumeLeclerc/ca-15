@@ -1,7 +1,7 @@
 ifeq (${DEBUG},1)
 CFLAGS = -O0 -ggdb -std=c++11
 else
-CFLAGS = -O3 -std=c++11
+CFLAGS = -O3 -std=c++11 -ggdb
 endif
 
 INCL = ./include

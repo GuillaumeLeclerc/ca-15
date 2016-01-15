@@ -21,7 +21,7 @@ sstm_metadata_global_t sstm_meta_global; /* global metadata */
 void
 sstm_start()
 {
-	locks = new TSTMLockArray(25, 2);
+	locks = new TSTMLockArray(10, 2);
 }
 
 /* terminates the TM runtime
@@ -69,6 +69,9 @@ extern void sstm_tx_init() {
 uintptr_t sstm_tx_load(volatile uintptr_t* addr)
 {
 	return memory->read(addr);
+}
+void sstm_tx_new() {
+	memory->newnew();
 }
 
 /* transactionally writes val in addr
@@ -165,4 +168,6 @@ sstm_alloc_on_commit()
 {
 	// I do this job somewhere else
 }
+
+
 

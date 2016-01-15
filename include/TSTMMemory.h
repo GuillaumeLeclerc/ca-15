@@ -11,11 +11,18 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <atomic>
+
+#include <algorithm>
 
 
+#if DEBUG
+#define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
+#else 
 #define PRINT(x) ;
-
+#endif
 typedef struct {
+	volatile word* addr;
 	word from;
 	word to;
 	word value;
@@ -26,62 +33,36 @@ typedef struct {
 
 class TSTMMemory {
 	private:
+
+		static std::atomic_uint readers;
 		TSTMLockArray& locks;
 		word id;
 		GlobalClock& clock;
-		std::unordered_map<volatile word*, object> writeLog;
-		std::unordered_map<volatile word*, object> readLog;
+		std::unordered_map<volatile word*, word> writeLog;
 		std::set<word*> allocated;
 		std::set<word*> freed;
-		std::vector<word*> acquiredLocks;
+		std::vector<word> acquiredLocks;
 		size_t begin;
 		size_t end;
 		size_t backoff;
+		bool readOnly;
 
 		inline void relaseLocks() { 
-				for(auto& addr : acquiredLocks) {
-					PRINT("Unlocking");
-					__sync_synchronize();
-					this->locks[addr].unlock(this->id);
-					PRINT("UNLOCKED " << this->locks[addr].getVersion());
+			std::sort( this->acquiredLocks.begin(), this->acquiredLocks.end() );
+			this->acquiredLocks.erase( std::unique( this->acquiredLocks.begin(), this->acquiredLocks.end() ), this->acquiredLocks.end() );
+				for(auto& index : acquiredLocks) {
+					PRINT("Unlocking " << index);
+					this->locks.getLockAtIndex(index).unlock(this->id);
 				} 
 				acquiredLocks.clear();
 		}
 		inline void cleanLog() {
 			this->writeLog.clear();
-			this->readLog.clear();
 			this->freed.clear();
 			assert(this->allocated.size() == 0);
 		}
-		inline void extendValidity(word now) {
-			this->end = now;
 
-			for (auto& it: this->writeLog) {
-				TSTMLock& lock = this->locks[it.first];
-				if (!lock.locked()) {
-					word version = lock.getVersion();
-					PRINT("CUrrent VVV " << version);
-					if (version == it.second.from) {
-						it.second.to = now;
-					}
-				}
-				this->end = this->end<it.second.to?this->end:it.second.to;
-				PRINT("Extending end to " << this->end);
-			}
 
-			for (auto& it: this->readLog) {
-				TSTMLock& lock = this->locks[it.first];
-				if (!lock.locked()) {
-					word version = lock.getVersion();
-					PRINT("CUrrent VVV " << version);
-					if (version == it.second.from) {
-						it.second.to = now;
-					}
-				}
-				this->end = this->end<it.second.to?this->end:it.second.to;
-				PRINT("Extending end to " << this->end);
-			}
-		}
 		inline void increaseBackoff() {
 			PRINT("== Oold backoff" << this->backoff);
 			if (this->backoff == 0) {
@@ -91,9 +72,20 @@ class TSTMMemory {
 			}
 			PRINT("==New Backoff " << this->backoff);
 		}
+
 		inline void wait() {
 			PRINT("==Sleeping " << this->backoff);
 			std::this_thread::sleep_for(std::chrono::microseconds(this->backoff));
+		}
+
+		inline void getLock(volatile word* addr) {
+			PRINT("Trying to ack " << this->locks.getIndex(addr));
+			if(!this->locks[addr].lock(this->id)) {
+				TX_ABORT(1);
+			}
+			this->acquiredLocks.push_back(this->locks.getIndex(addr));
+			assert(this->locks.getLockAtIndex(this->locks.getIndex(addr)).own(this->id));
+			PRINT("Locked " << this->locks.getIndex(addr));
 		}
 
 	public:
@@ -101,133 +93,55 @@ class TSTMMemory {
 		void start();
 
 		inline word read(volatile word* addr) {
-			TSTMLock& lock = this->locks[addr];
-
-			auto writeEntry = this->writeLog.find(addr);
-			// the value has already been written we must return the last value
-			if (writeEntry != this->writeLog.end()) {
-				return writeEntry->second.value;
-			}
-
-			auto readEntry = this->readLog.find(addr);
-			// the value has been previously read, we can't provide a newer version;
-			if (readEntry != this->readLog.end()) {
-				return readEntry->second.value;
-			}
-
-			word latestVersion = lock.getVersion();
-			if (latestVersion > this->end) {
-				this->extendValidity(this->clock.getClock());
-			}
-
-			if (latestVersion <= this->end) {
-				if (lock.locked()) {
-					TX_ABORT(5);
+			//read only mode
+			if (this->readOnly) {
+				word version = this->locks[addr].getVersion();
+				if (version < begin) { // must not read new values;
+					TX_ABORT(2);
 				}
-				word now = this->clock.getClock();
-				__sync_synchronize();
-				word value = *addr;
-				PRINT("Reading " << value << " at " << now);
-				this->begin = this->begin>latestVersion?this->begin:latestVersion;
-				this->end = this->end<now?this->end:now;
-				object o = {
-					latestVersion,
-					now,
-					value
-				};
-				this->readLog[addr] = o;
-				return value;
+			} else {
+				this->getLock(addr);
+				auto it = this->writeLog.find(addr);
+				if (it != this->writeLog.end()) {
+					return it->second;
+				}
 			}
+			word val = *addr;
+			PRINT("Reading " << val);
+			return val;
+		}
 
-			TX_ABORT(1);
+		inline void newnew() {
+			this->readOnly = true;
 		}
 
 
 		inline void write(volatile word* addr, word value) {
-			PRINT("Writing: " << value);
-			TSTMLock& lock = this->locks[addr];
-
-
-
-			if (!lock.lock(this->id)) {
-				TX_ABORT(5);
-			}
-
-			this->acquiredLocks.push_back((word* )addr);
-
-			PRINT("GETTING THE FUCKING LOCK");
-
-			word currentVersion = lock.getVersion();
-			word now = this->clock.getClock();
-
-			PRINT("Current Version" << currentVersion << "Now " << now);
-			PRINT(this->begin << " - "  << this->end);
-
-			if (currentVersion > this->end) {
-				this->extendValidity(now);
-			}
-			PRINT(this->begin << " - "  << this->end);
-
-			if (currentVersion <= this->end) {
-				this->begin = this->begin > currentVersion?this->begin:currentVersion;
-				this->end = this->end<now?this->end:now;
-				object o = {
-					currentVersion,
-					now,
-					value
-				};
-				this->writeLog[addr] = o;
-				this->readLog.erase(addr);
-				PRINT(this->begin << " - "  << this->end);
-			} else {
+			if (this->readOnly) {
+				PRINT("FUCK YOU I'm not read only");
+				this->readOnly = false;
 				TX_ABORT(2);
 			}
+			this->getLock(addr);
+			this->writeLog[addr] = value;
 		}
 		inline void save() {
-			if (this->writeLog.size() > 0) {
-					word now = this->clock.increase(1);
-					/*flockfile(stdout);
-					  std::cout << "COMMIT STATUS at " << now << std::endl;
-					  std::cout << "me -> [" << this->begin << ", " << this->end << "]" << std::endl;
-					  for (auto& it : this->writeLog) {
-					  std::cout << it.first << " = [" << it.second.from << ", " << it.second.to << "] -> " << it.second.value << std::endl;
-					  }
-					  std::cout << "------" << std::endl;
-					  for (auto& it : this->readLog) {
-					  std::cout << it.first << " = [" << it.second.from << ", " << it.second.to << "] -> " << it.second.value << std::endl;
-					  }
-					  std::cout << "------" << std::endl;
-					  funlockfile(stdout);
-					  */
-					if (this->end < now - 1) {
-						this->extendValidity(now - 1);
-						//PRINT("me -> [" << this->begin << ", " << this->end << "]");
-						if (this->end < now - 1) {
-							TX_ABORT(4);
-						}
-					}
-					for (auto& it: this->writeLog) {
-						PRINT("WRITING ON MEMORY");
-						TSTMLock& lock = this->locks[(volatile word*)it.first];
-						lock.changeVersion(this->id, now);
-						assert(lock.getVersion() == now);
-						__sync_synchronize();
-						PRINT("WRITING ON MEMORY -- " << now);
-						*it.first = it.second.value;
-					}
+			if (!readOnly) {
+				for (auto& it : this->writeLog) {
+					*it.first = it.second;
 				}
+			}
 
-				// allocation were usefull
-				this->allocated.clear();
-				//free only if the transaction commit
-				for(auto& it : this->freed) {
-					free(it);
-				}
+			// allocation were usefull
+			this->allocated.clear();
+			//free only if the transaction commit
+			for(auto& it : this->freed) {
+				free(it);
+			}
 
-
-				PRINT("== Reset backoff");
-				this->backoff = 0;
-				PRINT("end TX");
+			PRINT("== Reset backoff");
+			this->backoff = 0;
+			PRINT("end TX");
 			this->relaseLocks();
 			this->cleanLog();
 		}

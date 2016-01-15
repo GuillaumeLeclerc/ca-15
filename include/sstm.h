@@ -67,6 +67,7 @@ extern sstm_metadata_global_t sstm_meta_global;
 #define TX_START()					\
   { PRINTD("|| Starting new tx\n");			\
     short int reason;					\
+	sstm_tx_new(); \
     if ((reason = sigsetjmp(sstm_meta.env, 0)) != 0)	\
       {							\
 	sstm_tx_cleanup();				\
@@ -138,6 +139,8 @@ extern sstm_metadata_global_t sstm_meta_global;
   */
   extern void sstm_tx_commit();
 
+  extern void sstm_tx_new();
+
 
 
 
@@ -166,6 +169,5 @@ extern sstm_metadata_global_t sstm_meta_global;
 #ifdef	__cplusplus
 }
 #endif
-
-#endif	/* _SSTM_H_ */
+#endif
 

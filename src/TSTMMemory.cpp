@@ -5,9 +5,10 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <algorithm>
 
 //#define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
-#define PRINT(x) ;
+//#define PRINT(x) flockfile(stdout);std::cout << "[" << this->id << "] " << x << std::endl;funlockfile(stdout)
 
 
 TSTMMemory::TSTMMemory(word id, TSTMLockArray& locks, GlobalClock& clock):
