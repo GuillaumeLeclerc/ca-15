@@ -68,7 +68,7 @@ class TSTMMemory {
 			if (this->backoff == 0) {
 				this->backoff = 1;
 			} else {
-				this->backoff *= 2;
+				this->backoff += 10;
 			}
 			PRINT("==New Backoff " << this->backoff);
 		}
@@ -153,8 +153,8 @@ class TSTMMemory {
 			this->allocated.clear();
 			this->cleanLog();
 			this->relaseLocks();
-			this->increaseBackoff();
-			this->wait();
+			//this->increaseBackoff();
+			//this->wait();
 		}
 		inline word* alloc(size_t t) {
 			word* ptr = (word*) malloc(t);
