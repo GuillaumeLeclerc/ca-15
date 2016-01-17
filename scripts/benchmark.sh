@@ -2,18 +2,6 @@
 
 duration=1;
 
-if [ $# -eq 0 ]
-then
-    echo "// pass any parameter to the script to skip compilation.."
-    ./scripts/create_glstm.sh;
-fi;
-
-if [ $? -eq 1 ];
-then
-    echo "!! ERROR: could not create the necessary executables for benchmarking";
-    exit 1;
-fi;
-
 nc=$(nproc);
 
 b0="bank_glstm"
@@ -42,7 +30,7 @@ do
 	thr1=$(./$b1 $w -n$i -d$duration | awk '/# Commits/ { print $5 }');
 	printf "%-16d " $thr1;
 	ratio=$(echo $thr1/$thr0 | bc -l);
-	printf "%-7.2f\n" $ratio;
+	LC_NUMERIC="en_US.UTF-8" printf "%-7.2f\n" $ratio;
 	rt=$(echo "$rt+$ratio" | bc -l);
     done;
 done;
