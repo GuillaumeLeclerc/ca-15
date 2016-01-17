@@ -12,6 +12,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <set>
 
 #include <algorithm>
 
@@ -46,6 +47,8 @@ class TSTMMemory {
 		size_t end;
 		size_t backoff;
 		bool readOnly;
+    void* addr;
+    std::set<void*> nroAddr;
 
 		inline void relaseLocks() { 
 			std::sort( this->acquiredLocks.begin(), this->acquiredLocks.end() );
@@ -101,10 +104,6 @@ class TSTMMemory {
 				}
 			} else {
 				this->getLock(addr);
-				auto it = this->writeLog.find(addr);
-				if (it != this->writeLog.end()) {
-					return it->second;
-				}
 			}
 			word val = *addr;
 			PRINT("Reading " << val);
@@ -112,26 +111,34 @@ class TSTMMemory {
 		}
 
 		inline void newnew() {
-			this->readOnly = true;
+      this->readOnly = true;
+      return;
+      this->addr = __builtin_return_address(0);
+      PRINT("---addr" << this->addr);
+      if (this->nroAddr.find(this->addr) != this->nroAddr.end()) {
+        this->readOnly = false;
+      } else {
+        this->readOnly = true;
+      }
 		}
 
 
 		inline void write(volatile word* addr, word value) {
 			if (this->readOnly) {
+        this->nroAddr.insert(this->addr);
 				PRINT("FUCK YOU I'm not read only");
 				this->readOnly = false;
-				TX_ABORT(2);
-			}
-			this->getLock(addr);
-			this->writeLog[addr] = value;
-		}
-		inline void save() {
-			if (!readOnly) {
-				for (auto& it : this->writeLog) {
-					*it.first = it.second;
-				}
+				TX_ABORT(6);
 			}
 
+      word version = this->locks[addr].getVersion();
+      if (version < begin) { // must not write new values;
+        TX_ABORT(2);
+      }
+			this->getLock(addr);
+      *addr = value;
+		}
+		inline void save() {
 			// allocation were usefull
 			this->allocated.clear();
 			//free only if the transaction commit

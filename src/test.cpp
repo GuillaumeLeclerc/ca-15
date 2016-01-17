@@ -4,8 +4,8 @@
 #include <thread>
 #include <chrono>
 
-#define T 10
-#define I 100
+#define T 1
+#define I 1
 
 int value = 0;
 int* ptr = &value;

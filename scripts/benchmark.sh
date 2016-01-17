@@ -51,7 +51,7 @@ do
 	thr1=$(./$l1 $w -n$i -d$duration | awk '/# Commits/ { print $5 }');
 	printf "%-16d " $thr1;
 	ratio=$(echo $thr1/$thr0 | bc -l);
-	printf "%-7.2f\n" $ratio;
+	LC_NUMERIC="en_US.UTF-8" printf "%-7.2f\n" $ratio;
 	rt=$(echo "$rt+$ratio" | bc -l);
     done;
 done;
@@ -62,6 +62,6 @@ if [ $bl -eq 1 ];
 then
     bonus=1;
 fi;
-printf "~~> Bonus points = ~%.1f \n" $bonus;
+LC_NUMERIC="en_US.UTF-8" printf "~~> Bonus points = ~%.1f \n" $bonus;
 echo "(We will ofc run your code on a larger 40-core processor)";
 echo "(Make certain that it scales with the number of threads)";
